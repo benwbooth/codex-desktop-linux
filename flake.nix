@@ -97,6 +97,16 @@
           hash = "sha256-6NVeJciYIkQB9mlADP1Q3X5fIbbMUB3YfxOW7K4zOOg=";
         };
 
+        # Pre-fetch the x11-ewmh-computer-use plugin tarball so its stage.sh
+        # doesn't need curl to github at build time (nix's sandbox blocks
+        # network for non-FOD builds). URL + hash mirrored from
+        # linux-features/x11-ewmh-computer-use/stage.sh so they stay in sync;
+        # bump both together when upstream releases a new version.
+        codexX11ComputerUseTarball = pkgs.fetchurl {
+          url = "https://github.com/AlekseiSeleznev/codex-computer-use-x11/releases/download/v0.1.3/codex-computer-use-x11-v0.1.3-x86_64-unknown-linux-gnu.tar.gz";
+          hash = "sha256-BnJEoW+egS6zaa9CFJZljM8Tixiv2xIY8psME8KbDGs=";
+        };
+
         codexVersion = "26.721.30844";
         electronVersion = "42.3.0";
         electronPlatform =
@@ -575,6 +585,9 @@ PY
             ''}
             ${pkgs.lib.optionalString (builtins.elem "global-dictation" effectiveLinuxFeatureIds) ''
             export CODEX_GLOBAL_DICTATION_LINUX_SOURCE="${codexGlobalDictationBinary}/bin/codex-global-dictation-linux"
+            ''}
+            ${pkgs.lib.optionalString (builtins.elem "x11-ewmh-computer-use" effectiveLinuxFeatureIds) ''
+            export CODEX_X11_COMPUTER_USE_RELEASE_TARBALL="${codexX11ComputerUseTarball}"
             ''}
             mkdir -p "$HOME" "$npm_config_cache" "$CARGO_HOME"
 
