@@ -1,20 +1,35 @@
 { lib }:
 let
   supportedFeatureIds = [
+    "agent-workspace"
+    "api-key-model-visibility"
+    "api-key-service-tier"
     "appshots"
+    "authenticated-proxy"
     "codex-wrapper-updater"
+    "conversation-mode"
+    "copilot-reasoning-effort"
     "directory-only-working-tree-watch"
     "frameless-titlebar"
     "global-dictation"
     "mcp-helper-reaper"
     "node-repl-reaper"
+    "omarchy-theme"
     "open-target-discovery"
     "persistent-status-panel"
     "pet-overlay"
+    "project-group-last-updated-sort"
+    "project-task-sort"
+    "read-aloud"
+    "read-aloud-mcp"
+    "record-and-replay"
     "remote-control-ui"
     "remote-mobile-control"
     "shallow-repository-watches"
+    "shared-app-server-socket"
+    "thorium-chrome-plugin"
     "ui-tweaks"
+    "x11-ewmh-computer-use"
   ];
 
   sortAndDeduplicate = featureIds:
