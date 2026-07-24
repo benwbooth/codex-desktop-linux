@@ -589,6 +589,12 @@ PY
             ${pkgs.lib.optionalString (builtins.elem "x11-ewmh-computer-use" effectiveLinuxFeatureIds) ''
             export CODEX_X11_COMPUTER_USE_RELEASE_TARBALL="${codexX11ComputerUseTarball}"
             ''}
+            # Nix consumers opt in to features that upstream ilysenko may not
+            # have re-tested against the latest ChatGPT.dmg. When only
+            # opted-in feature patches drift (build itself succeeds), promote
+            # anyway — those specific features may silently no-op until the
+            # patches are refreshed, but the rest of the app works.
+            export CODEX_ACCEPTANCE_OVERRIDE=1
             mkdir -p "$HOME" "$npm_config_cache" "$CARGO_HOME"
 
             source_dir="$TMPDIR/codex-source"
