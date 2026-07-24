@@ -104,7 +104,7 @@
         # bump both together when upstream releases a new version.
         codexX11ComputerUseTarball = pkgs.fetchurl {
           url = "https://github.com/AlekseiSeleznev/codex-computer-use-x11/releases/download/v0.1.3/codex-computer-use-x11-v0.1.3-x86_64-unknown-linux-gnu.tar.gz";
-          hash = "sha256-BnJEoW+egS6zaa9CFJZljM8Tixiv2xIY8psME8KbDGs=";
+          hash = "sha256-BnJEoW+egS6zaa9CFJZYyM8TixMFdEW7nRAxjymwwms=";
         };
 
         codexVersion = "26.721.30844";
