@@ -6,7 +6,7 @@
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, flake-utils }:
+  outputs = inputs@{ self, nixpkgs, flake-utils }:
     flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" ] (system:
       let
         rewriteCratesIoDownloadUrl = url:
@@ -887,6 +887,12 @@ PY
         };
 
         devShells.default = pkgs.mkShell {
+          FLAKE_INPUTS = builtins.concatStringsSep ":" (
+            map (input: input.outPath) (
+              builtins.attrValues (builtins.removeAttrs inputs [ "self" ])
+            )
+          );
+
           packages = [
             pkgs.nodejs
             pkgs.python3
