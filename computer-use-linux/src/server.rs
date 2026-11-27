@@ -256,8 +256,11 @@ impl ComputerUseLinux {
         let diagnostics = doctor_report();
         let (window_context, window_error, window_permissions_hint) =
             self.resolve_window_context(&params).await;
-        let max_nodes = params.max_nodes.unwrap_or(120).clamp(1, 500);
-        let max_depth = params.max_depth.unwrap_or(12).min(12);
+        // Chromium/Electron pages sit deep: Spotify's tracks and buttons are
+        // 15-27 levels down and number in the thousands, past the old caps
+        // (12 levels, 500 nodes), so callers may ask for more.
+        let max_nodes = params.max_nodes.unwrap_or(120).clamp(1, 5000);
+        let max_depth = params.max_depth.unwrap_or(12).min(64);
         let include_screenshot = params.include_screenshot.unwrap_or(true);
         let screenshot_options = params.screenshot_options();
         let app_filter = self

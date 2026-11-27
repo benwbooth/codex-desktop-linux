@@ -12,6 +12,7 @@ use atspi::{
 use atspi_connection::AccessibilityConnection;
 use schemars::JsonSchema;
 use serde::Serialize;
+use futures_util::StreamExt;
 use std::collections::VecDeque;
 use zbus::{
     fdo::DBusProxy,
@@ -118,6 +119,8 @@ pub async fn list_accessible_apps(limit: usize) -> Result<Vec<AccessibleAppSumma
     Ok(apps)
 }
 
+const SNAPSHOT_CONCURRENCY: usize = 48;
+
 pub async fn snapshot_tree(
     app_name_or_bundle_identifier: Option<&str>,
     target_pid: Option<u32>,
@@ -128,33 +131,44 @@ pub async fn snapshot_tree(
     let roots = registry_children(&conn).await?;
     let selected_roots =
         select_roots(&conn, roots, app_name_or_bundle_identifier, target_pid).await;
-    let mut nodes = Vec::new();
-    let mut queue = VecDeque::new();
-
-    for object_ref in selected_roots {
-        queue.push_back((object_ref, 0_u32, None));
-    }
-
-    while let Some((object_ref, depth, parent_index)) = queue.pop_front() {
-        if nodes.len() >= max_nodes {
-            break;
+    let mut nodes: Vec<AccessibilityNode> = Vec::new();
+    // Breadth-first, a level at a time with up to SNAPSHOT_CONCURRENCY
+    // nodes read at once: one D-Bus round trip after another took ~7 ms a
+    // node (17 s for a 1,500-node Chromium page). Indexes and order are the
+    // same as a sequential walk.
+    let mut level: Vec<(ObjectRefOwned, Option<u32>)> =
+        selected_roots.into_iter().map(|object_ref| (object_ref, None)).collect();
+    let mut depth = 0_u32;
+    while !level.is_empty() && nodes.len() < max_nodes {
+        level.truncate(max_nodes - nodes.len());
+        let conn = &conn;
+        let read: Vec<Option<(AccessibilityNode, Vec<ObjectRefOwned>)>> =
+            futures_util::stream::iter(level.into_iter())
+                .map(|(object_ref, parent_index)| async move {
+                    let proxy = open_accessible(conn, &object_ref).await.ok()?;
+                    let child_refs = if depth < max_depth {
+                        proxy.get_children().await.unwrap_or_default()
+                    } else {
+                        Vec::new()
+                    };
+                    let node = read_node(&proxy, &object_ref, 0, parent_index, depth).await;
+                    Some((node, child_refs))
+                })
+                .buffered(SNAPSHOT_CONCURRENCY)
+                .collect()
+                .await;
+        let mut next = Vec::new();
+        for (mut node, child_refs) in read.into_iter().flatten() {
+            if nodes.len() >= max_nodes {
+                break;
+            }
+            let index = nodes.len() as u32;
+            node.index = index;
+            nodes.push(node);
+            next.extend(child_refs.into_iter().map(|child| (child, Some(index))));
         }
-
-        let Ok(proxy) = open_accessible(&conn, &object_ref).await else {
-            continue;
-        };
-        let index = nodes.len() as u32;
-        let child_refs = if depth < max_depth {
-            proxy.get_children().await.unwrap_or_default()
-        } else {
-            Vec::new()
-        };
-
-        nodes.push(read_node(&proxy, &object_ref, index, parent_index, depth).await);
-
-        for child in child_refs {
-            queue.push_back((child, depth + 1, Some(index)));
-        }
+        level = next;
+        depth += 1;
     }
 
     Ok(nodes)
@@ -454,22 +468,35 @@ async fn read_node(
     depth: u32,
 ) -> AccessibilityNode {
     let proxies = proxy.proxies().await.ok();
+    // The properties are independent calls: ask for them all at once.
+    let (role, name, description, child_count, bounds, states, actions, value, text, editable) = futures_util::join!(
+        role_name(proxy),
+        proxy.name(),
+        proxy.description(),
+        proxy.child_count(),
+        bounds_from_proxies(proxies.as_ref(), proxy),
+        states_from_proxy(proxy),
+        actions_from_proxies(proxies.as_ref()),
+        value_from_proxies(proxies.as_ref()),
+        text_from_proxies(proxies.as_ref()),
+        supports_editable_text(proxies.as_ref()),
+    );
 
     AccessibilityNode {
         index,
         parent_index,
         depth,
         object_ref: object_ref_id(object_ref),
-        role: role_name(proxy).await,
-        name: optional_string(proxy.name().await.ok()),
-        description: optional_string(proxy.description().await.ok()),
-        child_count: proxy.child_count().await.unwrap_or_default(),
-        bounds: bounds_from_proxies(proxies.as_ref(), proxy).await,
-        states: states_from_proxy(proxy).await,
-        actions: actions_from_proxies(proxies.as_ref()).await,
-        value: value_from_proxies(proxies.as_ref()).await,
-        text: text_from_proxies(proxies.as_ref()).await,
-        supports_editable_text: supports_editable_text(proxies.as_ref()).await,
+        role,
+        name: optional_string(name.ok()),
+        description: optional_string(description.ok()),
+        child_count: child_count.unwrap_or_default(),
+        bounds,
+        states,
+        actions,
+        value,
+        text,
+        supports_editable_text: editable,
     }
 }
 
